@@ -9,6 +9,7 @@ GoPlus2 goPlus;
 const int arraySizeProgramme = 4;
 String programmeList[arraySizeProgramme] = {"Eco", "Delicat", "Rapide", "Intensif"};
 int menu = 0;
+int state = 0;
 
 unsigned char low_data[8] = {0};
 unsigned char high_data[12] = {0};
@@ -177,6 +178,12 @@ int deroulant(int array_size, int lengthX = 180, int lengthY = 30, int posX = 16
     if (M5.BtnB.wasReleased() || M5.BtnB.pressedFor(1000, 200))
     {
       choice = 1;
+      state++;
+    }
+    if (M5.BtnA.wasReleased() || M5.BtnA.pressedFor(1000, 200))
+    {
+      choice = 1;
+      state--;
     }
 
     if (M5.BtnC.wasReleased() || M5.BtnC.pressedFor(1000, 200))
@@ -260,12 +267,18 @@ void menuResume()
 
   int choice = 0;
 
-  while(!choice)
+  while (!choice)
   {
     M5.update();
     if (M5.BtnB.wasReleased() || M5.BtnB.pressedFor(1000, 200))
     {
       choice = 1;
+      state++;
+    }
+    if (M5.BtnA.wasReleased() || M5.BtnA.pressedFor(1000, 200))
+    {
+      choice = 1;
+      state--;
     }
   }
 }
@@ -295,24 +308,34 @@ void setup()
   header("Bonjour !", TFT_BLACK);
   M5.Lcd.setTextColor(TFT_GREEN, TFT_BLACK);
   delay(2000);
-
-  background();
-  
-  menu = menuProgramme();
-  Serial.println(menu);
-
-  menuResume();
-
-  M5.Lcd.setTextSize(3);
-  M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
-  M5.Lcd.setTextDatum(CC_DATUM);
-  M5.Lcd.drawString("LAVAGE EN COURS", 160, TFT_WIDTH / 2, 1);
-
 }
 
 void loop()
 {
+  switch (state)
+  {
+  case 0:
+    background();
+    menu = menuProgramme();
+    Serial.println(menu);
+    break;
 
+  case 1:
+    menuResume();
+    break;
+
+  case 2:
+    M5.Lcd.setTextSize(3);
+    M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
+    M5.Lcd.setTextDatum(CC_DATUM);
+    M5.Lcd.drawString("LAVAGE EN COURS", 160, TFT_WIDTH / 2, 1);
+    delay(10000);
+    state = 0;
+    break;
+
+  default:
+    break;
+  }
   /*
   electrovanne_control(HIGH);
   pump_control(HIGH);
