@@ -15,6 +15,12 @@ unsigned char low_data[8] = {0};
 unsigned char high_data[12] = {0};
 int water_level = 0;
 
+int val_bouton_pause = 1;
+int last_val_bouton_pause = 1;
+
+int val_bouton_resume = 1;
+int last_val_bouton_resume = 1;
+
 #define NO_TOUCH 0xFE
 #define THRESHOLD 100
 #define ATTINY1_HIGH_ADDR 0x78
@@ -293,6 +299,115 @@ void background()
   M5.Lcd.drawString("Defiler", 270, TFT_WIDTH - 15, 1);
 }
 
+void remplissage(int pourcentage = 20)
+{
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
+  M5.Lcd.setTextDatum(CC_DATUM);
+  M5.Lcd.drawString("Remplissage", 160, TFT_WIDTH / 2, 1);
+
+  int water_level_initial = 30; // getWaterLevel(); // 30% par ex
+  int water_level_goal = water_level_initial - pourcentage;
+  long timer = millis();
+  int pass = 0;
+  int pause_state = 0;
+  long timer_tampon = 0;
+
+  while (!pass)
+  {
+    if (30 < water_level_goal)
+    {
+      pass = 1;
+    }
+    readBouton();
+
+    if (val_bouton_pause == 0 && last_val_bouton_pause == 1)
+    {
+      timer_tampon = timer_tampon + millis() - timer; // 3sec  1sec
+      Serial.println("Pause remplissage");
+      pumpControl(LOW);
+
+      while (pause_state == 0)
+      {
+        readBouton();
+        if (val_bouton_resume == 0 && last_val_bouton_resume == 1)
+        {
+          pause_state = 1;
+          Serial.println("Resume remplissage");
+          timer = millis();
+        }
+      }
+      pause_state = 0;
+    }
+
+    pumpControl(HIGH);
+
+    if (millis() - timer > 5000 - timer_tampon)
+    {
+      pass = 1;
+    }
+  }
+}
+
+void lavage(int time = 10000)
+{
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
+  M5.Lcd.setTextDatum(CC_DATUM);
+  M5.Lcd.drawString("Lavage", 160, TFT_WIDTH / 2, 1);
+
+  motorControl(100);
+
+  long timer = millis();
+  long timer_tampon = 0;
+
+  while (millis() - timer < time - timer_tampon)
+  {
+    int pause_state = 0;
+    readBouton();
+
+    if (val_bouton_pause == 0 && last_val_bouton_pause == 1)
+    {
+      timer_tampon = timer_tampon + millis() - timer; // 3sec
+      Serial.println("Pause lavage");
+      pumpControl(LOW);
+      while (pause_state == 0)
+      {
+        readBouton();
+        if (val_bouton_resume == 0 && last_val_bouton_resume == 1)
+        {
+          pause_state = 1;
+          Serial.println("Resume lavage");
+          timer = millis();
+        }
+      }
+    }
+  }
+  
+  motorControl(0);
+}
+
+void vidange(int time = 10000)
+{
+  M5.Lcd.setTextSize(3);
+  M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
+  M5.Lcd.setTextDatum(CC_DATUM);
+  M5.Lcd.drawString("Vidange", 160, TFT_WIDTH / 2, 1);
+
+  electrovanneControl(HIGH);
+  delay(time);
+  electrovanneControl(LOW);
+}
+
+void readBouton()
+{
+  val_bouton_resume = goPlus.hub1_d_read_value(HUB1_R_O_ADDR); // read digital_input
+  // Serial.print(val_bouton_resume);
+  // Serial.print("  ");
+  val_bouton_pause = goPlus.hub1_d_o_read_value(HUB1_R_O_ADDR); // read digital_input
+  // Serial.println(val_bouton_pause);
+}
+
 void setup()
 {
 
@@ -325,11 +440,11 @@ void loop()
     break;
 
   case 2:
-    M5.Lcd.setTextSize(3);
-    M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
-    M5.Lcd.setTextDatum(CC_DATUM);
-    M5.Lcd.drawString("LAVAGE EN COURS", 160, TFT_WIDTH / 2, 1);
-    delay(10000);
+
+    remplissage();
+    lavage();
+    vidange();
+
     state = 0;
     break;
 
