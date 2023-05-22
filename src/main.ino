@@ -14,6 +14,7 @@ int state = 0;
 unsigned char low_data[8] = {0};
 unsigned char high_data[12] = {0};
 int water_level = 0;
+int water_level_init = 0;
 
 int val_bouton_pause = 1;
 int last_val_bouton_pause = 1;
@@ -43,6 +44,11 @@ void motorControl(int speed) // 80 à 126
 }
 
 void pumpControl(int state)
+{
+  goPlus.hub1_wire_value(HUB1_W_ADDR, state);
+}
+
+void pumpVidangeControl(int state)
 {
   goPlus.hub3_wire_value(HUB3_W_ADDR, state);
 }
@@ -299,15 +305,14 @@ void background()
   M5.Lcd.drawString("Defiler", 270, TFT_WIDTH - 15, 1);
 }
 
-void remplissage(int pourcentage = 20)
+void remplissage(int pourcentage = 5)
 {
   M5.Lcd.setTextSize(3);
   M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
   M5.Lcd.setTextDatum(CC_DATUM);
   M5.Lcd.drawString("Remplissage", 160, TFT_WIDTH / 2, 1);
 
-  int water_level_initial = 30; // getWaterLevel(); // 30% par ex
-  int water_level_goal = water_level_initial - pourcentage;
+  int water_level_goal = water_level_init - pourcentage;
   long timer = millis();
   int pass = 0;
   int pause_state = 0;
@@ -315,12 +320,13 @@ void remplissage(int pourcentage = 20)
 
   while (!pass)
   {
-    if (30 < water_level_goal)
+    if (water_level == water_level_goal && millis()-timer > 4000)
     {
       pass = 1;
+      Serial.println("Assez d'eau");
     }
     readBouton();
-
+    water_level = getWaterLevel();
     if (val_bouton_pause == 0 && last_val_bouton_pause == 1)
     {
       timer_tampon = timer_tampon + millis() - timer; // 3sec  1sec
@@ -346,10 +352,12 @@ void remplissage(int pourcentage = 20)
     {
       pass = 1;
     }
+    delay(100);
   }
+  pumpControl(LOW);
 }
 
-void lavage(int time = 10000)
+void lavage(int time = 20000)
 {
   M5.Lcd.setTextSize(3);
   M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
@@ -370,12 +378,15 @@ void lavage(int time = 10000)
     {
       timer_tampon = timer_tampon + millis() - timer; // 3sec
       Serial.println("Pause lavage");
-      pumpControl(LOW);
+      electrovanneControl(LOW);
+      motorControl(LOW);
       while (pause_state == 0)
       {
         readBouton();
         if (val_bouton_resume == 0 && last_val_bouton_resume == 1)
         {
+          electrovanneControl(HIGH);
+          motorControl(HIGH);
           pause_state = 1;
           Serial.println("Resume lavage");
           timer = millis();
@@ -383,28 +394,47 @@ void lavage(int time = 10000)
       }
     }
   }
-  
+
   motorControl(0);
 }
 
-void vidange(int time = 10000)
+void vidange(int time = 30000)
 {
+  pumpVidangeControl(HIGH);
   M5.Lcd.setTextSize(3);
   M5.Lcd.fillRect(0, 0, TFT_HEIGHT, TFT_WIDTH, TFT_BLACK);
   M5.Lcd.setTextDatum(CC_DATUM);
   M5.Lcd.drawString("Vidange", 160, TFT_WIDTH / 2, 1);
 
-  electrovanneControl(HIGH);
-  delay(time);
-  electrovanneControl(LOW);
+  long timer = millis();
+  int pass = 0;
+  long timer_tampon = 0;
+
+  while (!pass)
+  {
+    getWaterLevel();
+    if (water_level == water_level_init && millis()-timer > 15000)
+    {
+      pass = 1;
+      Serial.println("Eau vidangé");
+    }
+    if (millis() - timer > time)
+    {
+      Serial.println("Temps écoulé vidange");
+      pass = 1;
+    }
+
+    delay(100);
+  }
+  pumpVidangeControl(LOW);
 }
 
 void readBouton()
 {
-  val_bouton_resume = goPlus.hub1_d_read_value(HUB1_R_O_ADDR); // read digital_input
+  val_bouton_resume = goPlus.hub3_a_read_value(HUB3_R_ADDR); // read digital_input
   // Serial.print(val_bouton_resume);
   // Serial.print("  ");
-  val_bouton_pause = goPlus.hub1_d_o_read_value(HUB1_R_O_ADDR); // read digital_input
+  val_bouton_pause = goPlus.hub2_a_read_value(HUB2_R_ADDR); // read digital_input
   // Serial.println(val_bouton_pause);
 }
 
@@ -417,16 +447,67 @@ void setup()
 
   Serial.begin(115200);
 
-  goPlus.hub2_set_io(HUB1_R_O_ADDR, 1); // set digital_output to digital_input
-  goPlus.hub3_set_io(HUB3_R_O_ADDR, 0); // set digital_output to digital_input
+  // goPlus.hub2_set_io(HUB1_R_O_ADDR, 1); // set digital_output to digital_input
+  // goPlus.hub3_set_io(HUB3_R_O_ADDR, 1); // set digital_output to digital_input
 
   header("Bonjour !", TFT_BLACK);
   M5.Lcd.setTextColor(TFT_GREEN, TFT_BLACK);
   delay(2000);
+  cleanScreen();
+  /*
+    while (true)
+    {
+      M5.update();
+      readBouton();
+
+      water_level = getWaterLevel();
+      Serial.print("water level = ");
+      Serial.print(water_level);
+      Serial.println("% ");
+      header(String(water_level).c_str(), TFT_BLACK);
+      delay(100);
+
+      if (val_bouton_resume > 1)
+      {
+        pumpControl(LOW);
+        Serial.print("pump LOW");
+      }
+      else
+      {
+        pumpControl(HIGH);
+        Serial.print("pump HIGH");
+      }
+
+      if (val_bouton_pause > 1)
+      {
+        electrovanneControl(LOW);
+        Serial.print("   electro LOW");
+      }
+      else
+      {
+        electrovanneControl(HIGH);
+        Serial.print("   electro HIGH");
+      }
+
+      if (M5.BtnC.isPressed())
+      {
+        pumpVidangeControl(HIGH);
+        Serial.println("   Vidange HIGH");
+      }
+      else
+      {
+        pumpVidangeControl(LOW);
+        Serial.println("   Vidange LOW");
+      }
+    }
+    */
+    
+    
 }
 
 void loop()
 {
+
   switch (state)
   {
   case 0:
@@ -436,14 +517,25 @@ void loop()
     break;
 
   case 1:
+    background();
     menuResume();
     break;
 
   case 2:
 
+    water_level_init = getWaterLevel();
+    Serial.print("water level init = ");
+    Serial.print(water_level_init);
+    Serial.println("% ");
+    header(String(water_level_init).c_str(), TFT_BLACK);
+    delay(2000);
+
+    background();
     remplissage();
+    electrovanneControl(HIGH);
     lavage();
     vidange();
+    electrovanneControl(LOW);
 
     state = 0;
     break;
@@ -451,6 +543,7 @@ void loop()
   default:
     break;
   }
+
   /*
   electrovanne_control(HIGH);
   pump_control(HIGH);
@@ -468,15 +561,15 @@ void loop()
   motor_control(0);
   delay(2000);
   */
-
-  /*
-  water_level = get_water_level();
+/*
+  water_level = getWaterLevel();
 
   Serial.print("water level = ");
   Serial.print(water_level);
   Serial.println("% ");
+  header(String(water_level).c_str(), TFT_BLACK);
+  delay(100);
 */
-
   /*
     // Lire limit_switch + ecrire sur relay PB1 electrovanne
     int val1 = goPlus.hub1_d_read_value(HUB1_R_O_ADDR);  //read digital_input
