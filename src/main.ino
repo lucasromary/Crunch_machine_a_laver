@@ -5,6 +5,10 @@
 #include <driver/rmt.h>
 #include <math.h>
 
+#include "Arduino.h"
+#include "WiFi.h"
+#include "ArduinoOTA.h"
+
 #define NOTE_D0 -1
 #define NOTE_D1 294
 #define NOTE_D2 330
@@ -213,6 +217,7 @@ int deroulant(int array_size, int lengthX = 180, int lengthY = 30, int posX = 16
 
   while (!choice)
   {
+    ArduinoOTA.handle();
     M5.update();
 
     if (M5.BtnB.wasReleased() || M5.BtnB.pressedFor(1000, 200))
@@ -600,6 +605,7 @@ void modeManuel()
 
   while (!auto_mode)
   {
+    ArduinoOTA.handle();
     M5.update();
     readBouton();
 
@@ -663,6 +669,63 @@ void modeManuel()
   delay(1500);
 }
 
+void initOTA()
+{
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP("CrunchWasher");
+
+  Serial.print("local IP address: ");
+  Serial.println(WiFi.softAPIP());
+
+  // Port defaults to 3232
+  ArduinoOTA.setPort(3232);
+
+  // Hostname defaults to esp3232-[MAC]
+  ArduinoOTA.setHostname("myesp32-OTA");
+
+  // No authentication by default
+  // ArduinoOTA.setPassword("admin");
+
+  // Password can be set with it's md5 value as well
+  // MD5(admin) = 21232f297a57a5a743894a0e4a801fc3
+  // ArduinoOTA.setPasswordHash("21232f297a57a5a743894a0e4a801fc3");
+  ArduinoOTA
+      .onStart([]()
+               {
+			String type;
+			if (ArduinoOTA.getCommand() == U_FLASH)
+				type = "sketch";
+			else // U_SPIFFS
+				type = "filesystem";
+
+			// NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+			Serial.println("Start updating " + type); })
+      .onEnd([]()
+             { Serial.println("\nEnd"); })
+      .onProgress([](unsigned int progress, unsigned int total)
+                  { Serial.printf("Progress: %u%%\r", (progress / (total / 100))); })
+      .onError([](ota_error_t error)
+               {
+			Serial.printf("Error[%u]: ", error);
+			if (error == OTA_AUTH_ERROR)
+				Serial.println("Auth Failed");
+			else if (error == OTA_BEGIN_ERROR)
+				Serial.println("Begin Failed");
+			else if (error == OTA_CONNECT_ERROR)
+				Serial.println("Connect Failed");
+			else if (error == OTA_RECEIVE_ERROR)
+				Serial.println("Receive Failed");
+			else if (error == OTA_END_ERROR)
+				Serial.println("End Failed"); });
+
+  ArduinoOTA.setTimeout(60000);
+  ArduinoOTA.begin();
+
+  Serial.println("Ready");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
 void setup()
 {
 
@@ -671,6 +734,7 @@ void setup()
   delay(100);
 
   Serial.begin(115200);
+  initOTA();
 
   // goPlus.hub2_set_io(HUB1_R_O_ADDR, 1); // set digital_output to digital_input
   // goPlus.hub3_set_io(HUB3_R_O_ADDR, 1); // set digital_output to digital_input
