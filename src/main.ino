@@ -790,11 +790,12 @@ void setup()
       }
     }
     */
+
 }
 
 void loop()
 {
-
+  ArduinoOTA.handle();
   switch (state)
   {
   case 0:
